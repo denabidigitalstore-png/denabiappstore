@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DENABI APP STORE - Professional Edition v11.1 Fixed</title>
+    <title>DENABI APP STORE - Professional Edition v11.2 Nota Fixed</title>
     <style>
 /*<![CDATA[*/
         /* TEMA PROFESIONAL PREMIUM (PURPLE AMETHYST & GOLD) */
@@ -691,7 +691,7 @@ body.dark-mode .nav-empty-state{background:rgba(255,255,255,.03)}
     <img src="logo.png" alt="DENABI LOGO" class="app-logo" onerror="this.style.display='none'">
     
     <h1>DENABI APP STORE</h1>
-    <p>Professional Universal Edition v11.1 Fixed</p>
+    <p>Professional Universal Edition v11.2 Nota</p>
     
     <div class="nav-tabs">
         <div class="tab-btn active btn-3d" onclick="switchTab('tools', this)">🛠️ ADMIN</div>
@@ -1347,6 +1347,62 @@ body.dark-mode .nav-empty-state{background:rgba(255,255,255,.03)}
         return expDate.toISOString();
     }
 
+    function extractCredentialBlock(detail) {
+        const lines = detail.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let email = "";
+        let password = "";
+        let usedIndex = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const pipe = line.match(/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\s*\|\s*(.+)/i);
+            if (pipe) {
+                email = pipe[1].trim();
+                password = pipe[2].trim();
+                usedIndex = i;
+                break;
+            }
+        }
+
+        if (!email) {
+            const emailLine = detail.match(/(?:email|mail|akun|username|uname)\s*[:=]\s*([^\n|]+)/i);
+            if (emailLine) email = emailLine[1].trim();
+        }
+        if (!password) {
+            const passLine = detail.match(/(?:pass|password|sandi|pw)\s*[:=]\s*([^\n]+)/i);
+            if (passLine) password = passLine[1].trim();
+        }
+
+        const cleanLines = lines.filter((line, idx) => {
+            if (idx === usedIndex) return false;
+            if (/^(email|mail|akun|username|uname|pass|password|sandi|pw)\s*[:=]/i.test(line)) return false;
+            if (/akun otomatis diperpanjang otomatis setiap 7 hari sekali/i.test(line)) return false;
+            return true;
+        });
+
+        return { email, password, extra: cleanLines.join('\n').trim() };
+    }
+
+    function getIndonesianDateParts() {
+        const now = new Date();
+        const hari = now.toLocaleDateString('id-ID', { weekday: 'long' });
+        const jam = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
+        const tanggal = now.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return { now, hari, jam, tanggal };
+    }
+
+    function buildDenabiNota(detail, jenisOrderan) {
+        const { hari, jam, tanggal } = getIndonesianDateParts();
+        const akun = extractCredentialBlock(detail);
+        const orderName = (jenisOrderan || '').trim() || 'Orderan Premium';
+        const akunBlock = (akun.email || akun.password)
+            ? `\nDetail Akun:\nEmail : ${akun.email || '-'}\nPassword : ${akun.password || '-'}`
+            : `\nDetail Akun:\n${detail.trim() || '-'}`;
+        const ketManual = akun.extra ? `4. ${akun.extra}` : '4. -';
+
+        return `Berikut detail pesanan Anda:\n\nhari : ${hari}\njam : ${jam}\ntanggal/bulan/tahun : ${tanggal}\n\njenis orderan : ${orderName}\n${akunBlock}\n\nketerangan :\n\n1. *Akun diperpanjang otomatis setiap 7 hari sekali*\n2. Dilarang mengganti sandi\n3. Dilarang login lebih dari 2 device\n${ketManual}\n\n---\n_Setelah berhasil login silahkan kirimkan bukti scrensoot ke sini._\n\n_Terimakasih telah order di_ *DENABI APP STORE*. _Kepuasan pelanggan adalah prioritas kami. Ditunggu next ordernya!_ 🌟`;
+    }
+
     function copyFullOrder() {
         let orderInput = document.getElementById('orderInput');
         if(!orderInput) return;
@@ -1372,11 +1428,9 @@ body.dark-mode .nav-empty-state{background:rgba(255,255,255,.03)}
         if(!rawSupLink && sss) { rawSupLink = sss.value; }
 
         let sSupLink = getCleanUrl(rawSupLink);
-        
-        let emailMatch = detail.match(/(?:email|mail|uname|username|no|nomor)\s*:\s*([^\n]+)/i);
-        let passMatch = detail.match(/(?:pass|password|sandi|pw)\s*:\s*([^\n]+)/i);
-        let extEmail = emailMatch ? emailMatch[1].trim() : "";
-        let extPass = passMatch ? passMatch[1].trim() : "";
+        const akunParsed = extractCredentialBlock(detail);
+        let extEmail = akunParsed.email;
+        let extPass = akunParsed.password;
 
         let namaLengkap = `${sProd} ${sVar}`.trim();
 
@@ -1398,9 +1452,9 @@ body.dark-mode .nav-empty-state{background:rgba(255,255,255,.03)}
             let timeStr = new Date().toLocaleDateString('id-ID') + ' ' + new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'});
             let appendText = `┌ [ TRANSAKSI : ${timeStr} ]\n├ Produk: ${namaLengkap}\n${detail.split('\n').map(l => '│ ' + l).join('\n')}\n└────────────────────────`;
             
-            if (navigasiDatabase[nIdx].content.trim() === "") {
+            if (navigasiDatabase[nIdx] && navigasiDatabase[nIdx].content.trim() === "") {
                 navigasiDatabase[nIdx].content = appendText;
-            } else {
+            } else if (navigasiDatabase[nIdx]) {
                 navigasiDatabase[nIdx].content = appendText + "\n\n" + navigasiDatabase[nIdx].content;
             }
             renderNavigasi();
@@ -1412,8 +1466,8 @@ body.dark-mode .nav-empty-state{background:rgba(255,255,255,.03)}
         if(sss) sss.value = "";
         if(sns) sns.value = "";
 
-        const fullMsg = `Berikut detail pesanan Anda:\n\n${detail}\n\n---\n_Setelah berhasil login silahkan kirimkan bukti scrensoot ke sini._\n\n_Terimakasih telah order di_ *Aplikasi Premium Termurah*. _Kepuasan pelanggan adalah prioritas kami. Ditunggu next ordernya!_ 🌟`;
-        navigator.clipboard.writeText(fullMsg).then(() => { alert("📋 Nota Order Disalin, Tercatat, & Tersimpan Otomatis!"); });
+        const fullMsg = buildDenabiNota(detail, namaLengkap);
+        navigator.clipboard.writeText(fullMsg).then(() => { alert("📋 Nota DENABI berhasil disalin dengan format baru!"); });
     }
 
     let modalCallback = null;
